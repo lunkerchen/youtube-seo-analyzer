@@ -48,9 +48,13 @@
     const pr = window.ytInitialPlayerResponse;
     if (pr?.videoDetails) {
       const vd = pr.videoDetails;
+      const _title = vd.title || '';
+      const _desc = vd.shortDescription || '';
       return {
-        title: vd.title || '',
-        description: vd.shortDescription || '',
+        title: _title,
+        description: _desc,
+        _cjkChars: (_title.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []),
+        _descLength: _desc ? _desc.trim().length : 0,
         tags: vd.keywords || [],
         channelName: vd.author || '',
         channelId: vd.channelId || '',
@@ -91,6 +95,8 @@
     return {
       title,
       description,
+      _cjkChars: (title.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []),
+      _descLength: description ? description.trim().length : 0,
       tags,
       channelName,
       channelId: '',
@@ -125,6 +131,8 @@
     return {
       title,
       description,
+      _cjkChars: (title.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []),
+      _descLength: description ? description.trim().length : 0,
       tags,
       channelName,
       channelId: '',
@@ -169,62 +177,63 @@
           const px = imageData.data;
           const total = W * H;
 
+          // Single-pass: compute brightness, contrast, edge density, and color clusters
+          const BLOCK = 8;
+          const bw = Math.ceil(W / BLOCK), bh = Math.ceil(H / BLOCK);
+          const blockStats = new Array(bw * bh);
+          for (let bi = 0; bi < blockStats.length; bi++) blockStats[bi] = { sum: 0, sumSq: 0, cnt: 0 };
+
           let sumLum = 0, sumLumSq = 0;
-          for (let i = 0; i < total; i++) {
-            const idx = i * 4;
-            const lum = 0.299 * px[idx] + 0.587 * px[idx + 1] + 0.114 * px[idx + 2];
-            sumLum += lum;
-            sumLumSq += lum * lum;
+          const colorMap = new Map();
+
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              const idx = (y * W + x) * 4;
+              const r = px[idx], g = px[idx + 1], b = px[idx + 2];
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+              sumLum += lum;
+              sumLumSq += lum * lum;
+
+              // Block-level variance (edge density proxy)
+              const bx = Math.floor(x / BLOCK), by = Math.floor(y / BLOCK);
+              const bs = blockStats[by * bw + bx];
+              bs.sum += lum;
+              bs.sumSq += lum * lum;
+              bs.cnt++;
+
+              // Color quantization
+              const qr = Math.round(r / 64) * 64, qg = Math.round(g / 64) * 64, qb = Math.round(b / 64) * 64;
+              if (qr + qg + qb >= 60) {
+                const key = `${qr},${qg},${qb}`;
+                const entry = colorMap.get(key);
+                if (entry) entry.count++;
+                else colorMap.set(key, { key, r: qr, g: qg, b: qb, count: 1 });
+              }
+            }
           }
+
+          // Compute derived values
           const avgLum = sumLum / total;
           const variance = sumLumSq / total - avgLum * avgLum;
           const contrast = Math.sqrt(variance);
 
-        // — Edge density (text proxy via Sobel on downsampled grid) —
-        // Sample a coarse grid: divide into 16x16 blocks, check within-block luminance variance
-        const BLOCK = 8;
-        const bw = Math.floor(W / BLOCK), bh = Math.floor(H / BLOCK);
-        let edgeBlocks = 0;
-        for (let by = 0; by < bh; by++) {
-          for (let bx = 0; bx < bw; bx++) {
-            let blockSum = 0, blockSumSq = 0, blockCount = 0;
-            for (let dy = 0; dy < BLOCK && by * BLOCK + dy < H; dy++) {
-              for (let dx = 0; dx < BLOCK && bx * BLOCK + dx < W; dx++) {
-                const pi = ((by * BLOCK + dy) * W + (bx * BLOCK + dx)) * 4;
-                const l = 0.299 * px[pi] + 0.587 * px[pi + 1] + 0.114 * px[pi + 2];
-                blockSum += l;
-                blockSumSq += l * l;
-                blockCount++;
-              }
-            }
-            if (blockCount > 0) {
-              const bAvg = blockSum / blockCount;
-              const bVar = blockSumSq / blockCount - bAvg * bAvg;
-              if (bVar > 800) edgeBlocks++; // high variance block = likely contains edges/text
+          let edgeBlocks = 0;
+          for (const bs of blockStats) {
+            if (bs.cnt > 0) {
+              const bAvg = bs.sum / bs.cnt;
+              const bVar = bs.sumSq / bs.cnt - bAvg * bAvg;
+              if (bVar > 800) edgeBlocks++;
             }
           }
-        }
-        const edgeDensity = edgeBlocks / (bw * bh);
+          const edgeDensity = edgeBlocks / blockStats.length;
 
-        // — Dominant color clusters (3) via Map for O(1) — O(n) buckets
-        const colorMap = new Map();
-        for (let i = 0; i < total; i++) {
-          const idx = i * 4;
-          const r = Math.round(px[idx] / 64) * 64;
-          const g = Math.round(px[idx + 1] / 64) * 64;
-          const b = Math.round(px[idx + 2] / 64) * 64;
-          if (r + g + b < 60) continue; // skip near-black/transparent
-          const key = `${r},${g},${b}`;
-          const entry = colorMap.get(key);
-          if (entry) entry.count++;
-          else colorMap.set(key, { key, r, g, b, count: 1 });
-        }
-        const sorted = [...colorMap.values()].sort((a, b) => b.count - a.count);
-        const dominantColors = sorted.slice(0, 3).map(c => ({
-          rgb: `rgb(${c.r},${c.g},${c.b})`,
-          hex: `#${c.r.toString(16).padStart(2, '0')}${c.g.toString(16).padStart(2, '0')}${c.b.toString(16).padStart(2, '0')}`,
-          pct: Math.round(c.count / total * 100),
-        }));
+          const sorted = [...colorMap.values()].sort((a, b) => b.count - a.count);
+          const dominantColors = sorted.slice(0, 3).map(c => ({
+            rgb: `rgb(${c.r},${c.g},${c.b})`,
+            hex: `#${c.r.toString(16).padStart(2, '0')}${c.g.toString(16).padStart(2, '0')}${c.b.toString(16).padStart(2, '0')}`,
+            pct: Math.round(c.count / total * 100),
+          }));
 
         // — Resolution check —
         const isMaxRes = img.naturalWidth >= 1280;
@@ -470,8 +479,9 @@
     const isShorts = data.isShorts;
     let score = 100;
 
-    const cjkChars = (data.title.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []);
-    const descLength = data.description ? data.description.trim().length : 0;
+    // Use pre-computed values from data when available, else compute
+    const cjkChars = data._cjkChars || (data.title.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []);
+    const descLength = data._descLength != null ? data._descLength : (data.description ? data.description.trim().length : 0);
     const hasNoTags = !data.tags || data.tags.length === 0;
 
     // =============================================
@@ -793,7 +803,125 @@
     return { score, issues, goodPractices, transcriptInfo: transcriptFindings?.info || null };
   }
 
-  // ======================== UI — PANEL ========================
+  // ======================== UI — PANEL (component helpers) ========================
+
+  function renderHeader(isShorts) {
+    return `<div class="ytseo-header">
+      <h2 class="ytseo-title">${isShorts ? '🔲 Shorts' : '🎬'} SEO 分析</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="ytseo-export-btn" id="ytseo-export" title="匯出 Markdown 報告">↓</button>
+        <button class="ytseo-close" id="ytseo-close">&times;</button>
+      </div>
+    </div>`;
+  }
+
+  function renderScoreSection(score, tagsCount, descLength, isShorts) {
+    const cls = score >= 80 ? 'good' : score >= 60 ? 'ok' : 'bad';
+    const label = score >= 80 ? '表現不錯' : score >= 60 ? '有改善空間' : '需要大幅度優化';
+    return `<div class="ytseo-score-bar">
+      <div class="ytseo-score-circle ${cls}">
+        <span class="ytseo-score-num">${score}</span>
+        <span class="ytseo-score-label">/100</span>
+      </div>
+      <div class="ytseo-score-text">
+        ${label}
+        <span class="ytseo-score-sub">${tagsCount} 個標籤 · ${descLength} 字說明${isShorts ? ' · Shorts模式' : ''}</span>
+      </div>
+    </div>`;
+  }
+
+  function renderThumbnailSection(tr) {
+    if (!tr) return '';
+    const textLabel = tr.textLikelihood === 'high' ? '🟠可能' : tr.textLikelihood === 'medium' ? '🟡可能有' : '🟢無/很少';
+    const dots = tr.dominantColors?.length > 0
+      ? `<span class="ytseo-thumb-colors">${tr.dominantColors.map(c => `<span class="ytseo-color-dot" style="background:${escapeHtml(c.rgb)}" title="${escapeHtml(c.hex)} ${c.pct}%"></span>`).join('')}</span>`
+      : '';
+    return `<div class="ytseo-thumb-section">
+      <img class="ytseo-thumb-img" src="${tr.thumbnailUrl}" alt="Thumbnail" crossorigin="anonymous" />
+      <div class="ytseo-thumb-stats">
+        <span class="ytseo-thumb-stat">${tr.width}x${tr.height}</span>
+        <span class="ytseo-thumb-stat">${tr.isMaxRes ? '高解析' : '標準'}</span>
+        <span class="ytseo-thumb-stat">亮度 ${tr.avgBrightness}</span>
+        <span class="ytseo-thumb-stat">對比 ${tr.contrast}</span>
+        <span class="ytseo-thumb-stat">文字 ${textLabel}</span>
+        ${dots}
+      </div>
+    </div>`;
+  }
+
+  function renderTranscriptSection(ti) {
+    if (!ti) return '';
+    return `<div class="ytseo-thumb-section ytseo-transcript-section">
+      <div class="ytseo-thumb-stats">
+        <span class="ytseo-thumb-stat">${ti.isAuto ? '🤖 ASR' : '📝 手動字幕'}</span>
+        <span class="ytseo-thumb-stat">${escapeHtml(ti.language)}</span>
+        <span class="ytseo-thumb-stat">${ti.wordCount} 字</span>
+        <span class="ytseo-thumb-stat">${ti.wpm} wpm</span>
+        <span class="ytseo-thumb-stat">${ti.segmentsCount} 段落</span>
+        <span class="ytseo-thumb-stat">前30s關鍵詞 ${ti.titleKwCoverage}%</span>
+      </div>
+    </div>`;
+  }
+
+  function renderMetaSection(data, durationStr, viewStr, descLength) {
+    const tagsHtml = data.tags?.length > 0
+      ? `<div class="ytseo-meta-row ytseo-tags-row">
+          <span class="ytseo-meta-label">標籤</span>
+          <span class="ytseo-meta-val ytseo-tags">${data.tags.slice(0, 20).map(t => `<span class="ytseo-tag">${escapeHtml(t)}</span>`).join('')}</span>
+        </div>`
+      : '';
+    return `<div class="ytseo-meta">
+      <div class="ytseo-meta-row"><span class="ytseo-meta-label">頻道</span><span class="ytseo-meta-val">${escapeHtml(data.channelName) || '—'}</span></div>
+      <div class="ytseo-meta-row"><span class="ytseo-meta-label">標題</span><span class="ytseo-meta-val">${escapeHtml(data.title) || '—'}</span></div>
+      <div class="ytseo-meta-row"><span class="ytseo-meta-label">長度</span><span class="ytseo-meta-val">${durationStr}</span></div>
+      <div class="ytseo-meta-row"><span class="ytseo-meta-label">觀看</span><span class="ytseo-meta-val">${viewStr}</span></div>
+      <div class="ytseo-meta-row"><span class="ytseo-meta-label">標籤數</span><span class="ytseo-meta-val">${data.tags?.length || 0}</span></div>
+      <div class="ytseo-meta-row"><span class="ytseo-meta-label">說明長度</span><span class="ytseo-meta-val">${descLength} 字</span></div>
+      ${tagsHtml}
+    </div>`;
+  }
+
+  function renderGoodPractices(items) {
+    if (!items?.length) return '';
+    return `<div class="ytseo-section">
+      <h3 class="ytseo-section-title">✅ 表現良好的項目</h3>
+      <ul class="ytseo-good-list">${items.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>
+    </div>`;
+  }
+
+  function renderIssuesSection(issues, icons) {
+    if (!issues?.length) {
+      return '<div class="ytseo-section"><h3 class="ytseo-section-title">⚠️ 待優化項目</h3><p class="ytseo-empty">沒有發現明顯問題！這支影片的 SEO 設定很完整。</p></div>';
+    }
+    return `<div class="ytseo-section">
+      <h3 class="ytseo-section-title">⚠️ 待優化項目</h3>
+      ${issues.map(issue => `
+      <div class="ytseo-issue ytseo-sev-${issue.severity.toLowerCase()}">
+        <div class="ytseo-issue-head">
+          <span class="ytseo-sev-badge ${issue.severity.toLowerCase()}">${icons[issue.severity] || ''} ${issue.severity}</span>
+          <span class="ytseo-issue-title">${issue.icon} ${escapeHtml(issue.title)}</span>
+        </div>
+        <div class="ytseo-issue-detail">${escapeHtml(issue.detail)}</div>
+        <div class="ytseo-issue-fix">
+          <span class="ytseo-fix-label">💡 建議：</span>${escapeHtml(issue.fix)}
+        </div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  function renderPriorityGuide() {
+    return `<div class="ytseo-priority-guide">
+      <h3 class="ytseo-section-title">📋 優先級說明</h3>
+      <div class="ytseo-guide-row"><span class="ytseo-sev-badge p0">🔴 P0</span> 嚴重 — 立即處理，影響搜尋曝光</div>
+      <div class="ytseo-guide-row"><span class="ytseo-sev-badge p1">🟠 P1</span> 重要 — 下次上片前優化</div>
+      <div class="ytseo-guide-row"><span class="ytseo-sev-badge p2">🟡 P2</span> 中等 — 有時間再改進</div>
+      <div class="ytseo-guide-row"><span class="ytseo-sev-badge p3">⚪ P3</span> 建議 — 長期持續優化項目</div>
+    </div>`;
+  }
+
+  function renderFooter() {
+    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.7 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
+  }
 
   function createSEOInfo(data, analysis, thumbResult, transcriptInfo) {
     const durationStr = data.duration > 0
@@ -807,124 +935,19 @@
       : '—';
     const viewStr = data.viewCount > 0 ? data.viewCount.toLocaleString() : '—';
     const severityIcons = { P0: '🔴', P1: '🟠', P2: '🟡', P3: '⚪' };
-    const descLength = data.description ? data.description.trim().length : 0;
+    const descLength = data._descLength != null ? data._descLength : (data.description ? data.description.trim().length : 0);
 
-    const thumbnailHtml = thumbResult ? `
-      <div class="ytseo-thumb-section">
-        <img class="ytseo-thumb-img" src="${thumbResult.thumbnailUrl}" alt="Thumbnail" crossorigin="anonymous" />
-        <div class="ytseo-thumb-stats">
-          <span class="ytseo-thumb-stat">${thumbResult.width}x${thumbResult.height}</span>
-          <span class="ytseo-thumb-stat">${thumbResult.isMaxRes ? '高解析' : '標準'}</span>
-          <span class="ytseo-thumb-stat">亮度 ${thumbResult.avgBrightness}</span>
-          <span class="ytseo-thumb-stat">對比 ${thumbResult.contrast}</span>
-          <span class="ytseo-thumb-stat">文字 ${thumbResult.textLikelihood === 'high' ? '🟠可能' : thumbResult.textLikelihood === 'medium' ? '🟡可能有' : '🟢無/很少'}</span>
-          ${thumbResult.dominantColors?.length > 0 ? `<span class="ytseo-thumb-colors">${thumbResult.dominantColors.map(c => `<span class="ytseo-color-dot" style="background:${escapeHtml(c.rgb)}" title="${escapeHtml(c.hex)} ${c.pct}%"></span>`).join('')}</span>` : ''}
-        </div>
-      </div>` : '';
-
-    return `
-      <div class="ytseo-panel">
-        <div class="ytseo-header">
-          <h2 class="ytseo-title">${data.isShorts ? '🔲 Shorts' : '🎬'} SEO 分析</h2>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <button class="ytseo-export-btn" id="ytseo-export" title="匯出 Markdown 報告">↓</button>
-            <button class="ytseo-close" id="ytseo-close">&times;</button>
-          </div>
-        </div>
-
-        <div class="ytseo-score-bar">
-          <div class="ytseo-score-circle ${analysis.score >= 80 ? 'good' : analysis.score >= 60 ? 'ok' : 'bad'}">
-            <span class="ytseo-score-num">${analysis.score}</span>
-            <span class="ytseo-score-label">/100</span>
-          </div>
-          <div class="ytseo-score-text">
-            ${analysis.score >= 80 ? '表現不錯' : analysis.score >= 60 ? '有改善空間' : '需要大幅度優化'}
-            <span class="ytseo-score-sub">${data.tags?.length || 0} 個標籤 · ${descLength} 字說明${data.isShorts ? ' · Shorts模式' : ''}</span>
-          </div>
-        </div>
-
-        ${thumbnailHtml}
-        ${transcriptInfo ? `
-        <div class="ytseo-thumb-section ytseo-transcript-section">
-          <div class="ytseo-thumb-stats">
-            <span class="ytseo-thumb-stat">${transcriptInfo.isAuto ? '🤖 ASR' : '📝 手動字幕'}</span>
-            <span class="ytseo-thumb-stat">${escapeHtml(transcriptInfo.language)}</span>
-            <span class="ytseo-thumb-stat">${transcriptInfo.wordCount} 字</span>
-            <span class="ytseo-thumb-stat">${transcriptInfo.wpm} wpm</span>
-            <span class="ytseo-thumb-stat">${transcriptInfo.segmentsCount} 段落</span>
-            <span class="ytseo-thumb-stat">前30s關鍵詞 ${transcriptInfo.titleKwCoverage}%</span>
-          </div>
-        </div>` : ''}
-
-        <div class="ytseo-meta">
-          <div class="ytseo-meta-row">
-            <span class="ytseo-meta-label">頻道</span>
-            <span class="ytseo-meta-val">${escapeHtml(data.channelName) || '—'}</span>
-          </div>
-          <div class="ytseo-meta-row">
-            <span class="ytseo-meta-label">標題</span>
-            <span class="ytseo-meta-val">${escapeHtml(data.title) || '—'}</span>
-          </div>
-          <div class="ytseo-meta-row">
-            <span class="ytseo-meta-label">長度</span>
-            <span class="ytseo-meta-val">${durationStr}</span>
-          </div>
-          <div class="ytseo-meta-row">
-            <span class="ytseo-meta-label">觀看</span>
-            <span class="ytseo-meta-val">${viewStr}</span>
-          </div>
-          <div class="ytseo-meta-row">
-            <span class="ytseo-meta-label">標籤數</span>
-            <span class="ytseo-meta-val">${data.tags?.length || 0}</span>
-          </div>
-          <div class="ytseo-meta-row">
-            <span class="ytseo-meta-label">說明長度</span>
-            <span class="ytseo-meta-val">${descLength} 字</span>
-          </div>
-          ${data.tags?.length > 0 ? `
-          <div class="ytseo-meta-row ytseo-tags-row">
-            <span class="ytseo-meta-label">標籤</span>
-            <span class="ytseo-meta-val ytseo-tags">${data.tags.slice(0, 20).map(t => `<span class="ytseo-tag">${escapeHtml(t)}</span>`).join('')}</span>
-          </div>` : ''}
-        </div>
-
-        ${analysis.goodPractices.length > 0 ? `
-        <div class="ytseo-section">
-          <h3 class="ytseo-section-title">✅ 表現良好的項目</h3>
-          <ul class="ytseo-good-list">
-            ${analysis.goodPractices.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
-          </ul>
-        </div>` : ''}
-
-        <div class="ytseo-section">
-          <h3 class="ytseo-section-title">⚠️ 待優化項目</h3>
-          ${analysis.issues.length === 0
-            ? '<p class="ytseo-empty">沒有發現明顯問題！這支影片的 SEO 設定很完整。</p>'
-            : analysis.issues.map(issue => `
-          <div class="ytseo-issue ytseo-sev-${issue.severity.toLowerCase()}">
-            <div class="ytseo-issue-head">
-              <span class="ytseo-sev-badge ${issue.severity.toLowerCase()}">${severityIcons[issue.severity] || ''} ${issue.severity}</span>
-              <span class="ytseo-issue-title">${issue.icon} ${escapeHtml(issue.title)}</span>
-            </div>
-            <div class="ytseo-issue-detail">${escapeHtml(issue.detail)}</div>
-            <div class="ytseo-issue-fix">
-              <span class="ytseo-fix-label">💡 建議：</span>${escapeHtml(issue.fix)}
-            </div>
-          </div>`).join('')}
-        </div>
-
-        <div class="ytseo-priority-guide">
-          <h3 class="ytseo-section-title">📋 優先級說明</h3>
-          <div class="ytseo-guide-row"><span class="ytseo-sev-badge p0">🔴 P0</span> 嚴重 — 立即處理，影響搜尋曝光</div>
-          <div class="ytseo-guide-row"><span class="ytseo-sev-badge p1">🟠 P1</span> 重要 — 下次上片前優化</div>
-          <div class="ytseo-guide-row"><span class="ytseo-sev-badge p2">🟡 P2</span> 中等 — 有時間再改進</div>
-          <div class="ytseo-guide-row"><span class="ytseo-sev-badge p3">⚪ P3</span> 建議 — 長期持續優化項目</div>
-        </div>
-
-        <div class="ytseo-footer">
-          YouTube SEO 分析器 v1.6 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕
-        </div>
-      </div>`;
+    return `<div class="ytseo-panel">
+      ${renderHeader(data.isShorts)}
+      ${renderScoreSection(analysis.score, data.tags?.length || 0, descLength, data.isShorts)}
+      ${renderThumbnailSection(thumbResult)}
+      ${renderTranscriptSection(transcriptInfo)}
+      ${renderMetaSection(data, durationStr, viewStr, descLength)}
+      ${renderGoodPractices(analysis.goodPractices)}
+      ${renderIssuesSection(analysis.issues, severityIcons)}
+      ${renderPriorityGuide()}
+      ${renderFooter()}
+    </div>`;
   }
 
   // ======================== EXPORT MARKDOWN ========================
