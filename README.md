@@ -1,104 +1,276 @@
 # YouTube SEO 分析器 — Chrome 擴充功能
 
-一鍵分析 YouTube 影片的 SEO 表現，直接在影片頁面上提供優化建議。
+[![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.6-brightgreen)](https://github.com/lunkerchen/youtube-seo-analyzer)
+[![Chrome](https://img.shields.io/badge/chrome-manifest--v3-4285F4)](https://developer.chrome.com/docs/extensions/)
 
-## 功能
+一鍵分析 YouTube 影片的 SEO 表現，直接在影片頁面上提供優化建議。  
+以 **P0→P3 嚴重度分級**呈現，附綜合評分與 Markdown 報告匯出。
 
-- **標題分析** — 檢查中文字元是否超過 30 字（行動裝置截斷線）、是否過短
-- **標籤審計** — 檢查標籤數量與覆蓋度（目標 15-20 個）
-- **說明優化** — 前 150 字是否浪費在通用開場白、關鍵詞是否出現在說明開頭
-- **Hashtag 檢查** — 說明中是否使用 hashtag
-- **CTA 檢測** — 說明及口語中是否包含訂閱/留言等行動呼籲
-- **SEO 關鍵詞區塊** — 說明底部是否包含純 SEO 關鍵詞區塊
-- **逐字稿分析** — 從頁面字幕取得逐字稿，檢驗前 30 秒關鍵詞覆蓋率、口語與標籤關聯性、口語密度（wpm）
-- **縮圖視覺分析** — Canvas 像素級分析亮度、對比度、文字存在機率、色彩主調
-- **Shorts 支援** — 自動辨識 Shorts 頁面並調整檢查規則
-- **綜合評分** — 0-100 分，附優先級引導
+---
 
-問題依嚴重度分級：**P0（嚴重）→ P1（重要）→ P2（中等）→ P3（建議）**
+## 功能總覽
+
+### 核心分析引擎
+| 分析項目 | 檢查內容 | 等級 |
+|----------|----------|------|
+| **標題 SEO** | CJK 字數 ≤30（行動截斷線）、關鍵詞密度、搜尋意圖清晰度 | P0–P3 |
+| **標籤審計** | 數量（目標 15–20）、覆蓋度、中英文混合 | P0–P1 |
+| **說明優化** | 前 150 字有效性、關鍵詞前置、Hashtag 使用、CTA 存在 | P0–P3 |
+| **SEO 關鍵詞區塊** | 說明底部是否包含純 SEO 關鍵詞索引區 | P3 |
+| **Hashtag 檢測** | 說明/標題中的 #hashtag 數量與主題相關性 | P2 |
+| **行動呼籲 (CTA)** | 說明及口語中是否引導訂閱、留言、分享 | P3 |
+
+### 進階分析
+| 分析項目 | 技術手段 | 等級 |
+|----------|----------|------|
+| **縮圖視覺分析** | Canvas 像素級：亮度、對比度、邊緣密度（文字代理）、色彩主調聚類 | P1–P3 |
+| **逐字稿分析** | YouTube 字幕 XML：前 30 秒關鍵詞覆蓋、wpm 密度、ASR 品質、口語 CTA | P1–P3 |
+| **Shorts 特化** | #Shorts 標籤強制、Hashtag 必備、說明長度門檻下調、標籤數寬限 | P0–P3 |
+
+### 綜合評分
+0–100 分，**P0（嚴重）→ P1（重要）→ P2（中等）→ P3（建議）**，每項附具體修復建議。
+
+---
 
 ## 安裝
 
+### 從原始碼安裝（Chrome 開發者模式）
+
+```bash
+git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
+```
+
 1. 開啟 Chrome，前往 `chrome://extensions`
-2. 開啟右上角「開發者模式」
-3. 點擊「載入未封裝項目」
-4. 選擇 `chrome-extension/` 目錄
+2. 開啟右上角 **「開發者模式」**
+3. 點擊 **「載入未封裝項目」**
+4. 選擇專案中的 `chrome-extension/` 目錄
+
+### 更新方式
+每次更新後 `git pull`，然後到 `chrome://extensions` 點擊 ↻ 重新載入即可。
+
+---
 
 ## 使用方式
 
-1. 前往任何 YouTube 影片頁面（`youtube.com/watch?v=...`）或 Shorts 頁面（`youtube.com/shorts/...`）
-2. 右下角會出現藍色齒輪圖示按鈕
-3. 點擊按鈕即彈出 SEO 分析側面板
-4. 按 `Esc` 或點擊背景即可關閉
-5. 面板右上角 **↓** 按鈕可匯出完整報告為 Markdown 檔案
+1. 前往 **YouTube 影片頁面**（`youtube.com/watch?v=...`）或 **Shorts**（`youtube.com/shorts/...`）
+2. 右下角出現 **藍色齒輪** ⚙ 按鈕
+3. 點擊按鈕 → 右側滑出分析面板
+4. 面板包含：
+   - **綜合評分**（圓形進度 + 文字說明）
+   - **縮圖預覽** + 視覺分析數據
+   - **逐字稿資訊**（語言、字數、wpm、關鍵詞覆蓋率）
+   - **影片 Metadata**（標題、頻道、長度、觀看、標籤）
+   - **✅ 表現良好的項目**
+   - **⚠️ 待優化項目**（P0→P3 依序排列）
+5. 按 **`Esc`** 或點擊面板外背景 → 關閉
+6. 按 **`↓`**（綠色圓鈕）→ 匯出 Markdown 報告
 
-## 技術說明
+### 快捷鍵
+| 按鍵 | 動作 |
+|------|------|
+| 點擊 ⚙ | 開啟分析面板 |
+| `Esc` | 關閉面板 |
+| 點擊 ↓ | 匯出 Markdown 報告 |
 
-- **Manifest v3** — Chrome 最新擴充功能標準
-- **Content Script** — 直接從頁面擷取 `ytInitialPlayerResponse` 資料
-- **無後端** — 所有分析在瀏覽器中完成，不需 API key 或伺服器
-- **SPA 相容** — 支援 YouTube 的 SPA 導航，切換影片自動重新分析
-
-## 資料來源
-
-分析基於 YouTube 頁面中嵌入的 `ytInitialPlayerResponse` 物件，包含：
-- `videoDetails.title` — 標題
-- `videoDetails.shortDescription` — 說明
-- `videoDetails.keywords` — 標籤陣列
-- `videoDetails.author` — 頻道名稱
-- `videoDetails.viewCount` — 觀看次數
-- `videoDetails.lengthSeconds` — 影片長度
-- `captions.playerCaptionsTracklistRenderer.captionTracks` — 字幕軌（逐字稿分析）
-- `thumbnail.thumbnails` — 縮圖 URL（canvas 視覺分析）
-- `videoDetails.isLiveContent` — 直播判斷
-
-若 `ytInitialPlayerResponse` 不可用，會降級使用 DOM 查詢 (`meta[name="keywords"]`、`#description` 等)。
+---
 
 ## 分析流程
 
 ```
-doAnalysis()
-  ├── extractVideoData()        ← ytInitialPlayerResponse / DOM fallback
-  ├── analyzeThumbnail(data)    ← Canvas 像素分析（async）
-  ├── fetchTranscript(data)     ← YouTube 字幕 XML（async）
-  ├── analyzeTranscript()       ← 前30s關鍵詞、wpm、CTA、ASR判斷
-  └── analyzeVideo()            ← 合併所有 findings → score + issues
+頁面載入
+  │
+  ├─ yt-navigate-finish (SPA 導航) → cleanup + reinject
+  │
+  └─ 使用者點擊 ⚙ 按鈕
+       │
+       ├─ extractVideoData()
+       │   ├─ ytInitialPlayerResponse (主路徑)
+       │   ├─ meta[itemprop="duration"] (ISO 8601 降級)
+       │   └─ DOM query fallback
+       │
+       ├─ analyzeThumbnail(data)        ← Canvas 像素分析
+       │
+       ├─ fetchTranscript(data)         ← YouTube 字幕 XML (含 retry)
+       │
+       ├─ analyzeTranscript()           ← 30s 關鍵詞 / wpm / CTA / ASR
+       │
+       └─ analyzeVideo(data, thumb, transcript)
+            └─ 合併所有 findings → score + issues + goodPractices
+                    │
+                    └─ injectPanel() → 使用者閱讀 / 匯出
 ```
+
+---
+
+## 資料擷取
+
+### 主要來源：`ytInitialPlayerResponse`
+
+| 路徑 | 對應資料 | 備註 |
+|------|----------|------|
+| `videoDetails.title` | 標題 |  |
+| `videoDetails.shortDescription` | 說明 |  |
+| `videoDetails.keywords` | 標籤陣列 |  |
+| `videoDetails.author` | 頻道名稱 |  |
+| `videoDetails.channelId` | 頻道 ID |  |
+| `videoDetails.viewCount` | 觀看次數 |  |
+| `videoDetails.lengthSeconds` | 長度（秒） | 降級到 `meta[itemprop="duration"]` |
+| `videoDetails.videoId` | 影片 ID |  |
+| `videoDetails.isLiveContent` | 直播判斷 |  |
+| `videoDetails.isPrivate` | 隱私狀態 |  |
+| `videoDetails.thumbnail.thumbnails[]` | 縮圖 URL |  |
+| `captions.playerCaptionsTracklistRenderer.captionTracks` | 字幕軌 | 含語言、ASR 判斷 |
+
+### DOM 降級路徑
+當 `ytInitialPlayerResponse` 不可用時，依序嘗試：
+- `meta[name="keywords"]` → 標籤
+- `meta[itemprop="duration"]` → 長度
+- `h1.ytd-watch-metadata` / `h1.title` → 標題
+- `#description-inner` / `#description` → 說明
+- `[itemprop="description"]` → 說明（Shorts）
+- `.view-count` / `ytd-video-primary-info-renderer .view-count` → 觀看
+- `#owner #channel-name a` / `ytd-channel-name a` → 頻道名稱
+
+---
+
+## SEO 檢查清單
+
+### P0 — 嚴重（立即處理）
+
+- [ ] 標籤是否為空
+- [ ] 標題中文字元 > 30（行動截斷）
+- [ ] 說明為空
+- [ ] Shorts 標題缺少 #Shorts
+
+### P1 — 重要
+
+- [ ] 標籤數量 < 10（非 Shorts）/ < 8（Shorts）
+- [ ] 前 150 字為通用開場白
+- [ ] 標題關鍵詞未出現在說明開頭
+- [ ] 前 30 秒逐字稿未提及標題關鍵詞
+- [ ] 逐字稿與標籤關聯性低
+- [ ] 縮圖解析度低於 1280px
+- [ ] 縮圖對比度偏低
+
+### P2 — 中等
+
+- [ ] 標題過短
+- [ ] 說明未使用 Hashtag
+- [ ] 說明文字偏短
+- [ ] 標題關鍵詞完全未出現在口語中
+- [ ] 口語密度偏低（< 50 wpm）
+- [ ] 縮圖偏暗
+- [ ] 縮圖可能含有大量文字
+- [ ] 縮圖為自動生成
+- [ ] XSS / 安全性防護
+
+### P3 — 建議
+
+- [ ] 說明缺乏 CTA
+- [ ] 缺少 SEO 關鍵詞區塊
+- [ ] 搜尋意圖模糊
+- [ ] 結尾缺乏口語 CTA
+- [ ] 字幕為 ASR（非手動）
+- [ ] 縮圖色彩單一
+
+---
 
 ## 版本歷程
 
-| 版本 | 新增功能 |
-|------|----------|
-| v1.0 | 基礎 SEO 分析（標題、標籤、說明） |
-| v1.1 | Shorts 支援、縮圖視覺分析（Canvas） |
-| v1.2 | 逐字稿分析（字幕 XML） |
-| v1.3 | Duration 小時格式化修復 |
-| v1.4 | 安全性修復（XSS escape、Canvas try/catch、parseInt radix） |
-| v1.5 | 匯出 Markdown 報告、Firefox scrollbar 相容、Color bucket Map 優化 |
+| 版本 | 日期 | 變更 |
+|------|------|------|
+| v1.0 | — | 基礎 SEO 分析（標題、標籤、說明） |
+| v1.1 | — | Shorts 支援、縮圖視覺分析（Canvas） |
+| v1.2 | — | 逐字稿分析（字幕 XML） |
+| v1.3 | — | Duration 小時格式化修復 |
+| v1.4 | — | 安全性修復（XSS escape、Canvas try/catch、parseInt radix、injected flag clean） |
+| v1.5 | — | 匯出 Markdown 報告、Firefox scrollbar 相容、Color bucket Map 優化 |
+| v1.6 | 2026-05-14 | 影片長度擷取修復：新增 `meta[itemprop="duration"]` 三層降級機制 |
+
+---
 
 ## 專案結構
 
 ```
 youtube-seo-analyzer/
+├── README.md               # 文件
+├── LICENSE                 # MIT
+├── .gitignore
 └── chrome-extension/
-    ├── manifest.json       # 擴充功能設定
-    ├── content.js          # 主要邏輯（資料擷取 + 分析 + UI）
-    ├── styles.css          # 注入樣式（深色主題）
+    ├── manifest.json       # Manifest v3 設定（含 host_permissions）
+    ├── content.js          # 主邏輯：資料擷取 + 分析引擎 + UI 面板（~1200 行）
+    ├── styles.css          # 注入樣式：深色主題面板 + FAB + 縮圖顯示
     └── icons/
         ├── icon16.png
         ├── icon48.png
         └── icon128.png
 ```
 
+---
+
+## 安全性
+
+### Content Script 防護
+
+- **所有使用者資料**透過 `escapeHtml()` 過濾後才注入 DOM（防 XSS）
+- Canvas `getImageData()` 包裹 `try/catch`（防 tainted canvas）
+- `parseInt()` 強制指定 radix 10
+- 不使用 `eval()`、`innerText`、字串拼接 SQL 等危險 API
+
+### 權限最小化
+
+| Permission | 用途 |
+|------------|------|
+| `storage` | 擴充功能設定儲存 |
+| `https://www.youtube.com/*` | 執行 content script |
+| `https://i.ytimg.com/*` | 載入縮圖進行 Canvas 分析 |
+
+不需要 `tabs`、`cookies`、`webRequest`、`background`。
+
+---
+
 ## 開發
 
 ```bash
-# 修改後重新載入擴充功能
+# 修改後重新載入
 chrome://extensions → 重新載入
 
-# 或使用 Chrome 的「自動重新載入」功能
+# 語法檢查
+node --check chrome-extension/content.js
+
+# 來源
+git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
 ```
+
+---
+
+## 常見問題
+
+### 按鈕沒有出現？
+- 確認在 `youtube.com/watch?v=...` 或 `youtube.com/shorts/...` 頁面
+- 重新整理頁面後再試
+- 檢查 `chrome://extensions` 中擴充功能已啟用
+
+### SEO 分數好像不準？
+- 分析基於頁面資料與 canvas 像素估算，非 YouTube 內部 API
+- 縮圖文字分析為邊緣密度代理測量，非精確 OCR
+- 建議作為優化參考，非絕對標準
+
+### 逐字稿分析無結果？
+- 影片必須有啟用字幕（手動上傳或 YouTube 自動產生）
+- Shorts 通常沒有字幕，逐字稿分析會跳過
+
+---
 
 ## 未來計劃
 
 - [ ] 多影片批次分析（頻道層級 SEO 健檢）
+- [ ] 對比多個影片的 SEO 分數
+- [ ] 擴充功能選項頁（自訂檢查規則）
+
+---
+
+## License
+
+MIT License — 詳見 [LICENSE](LICENSE)。
