@@ -1,7 +1,7 @@
 # YouTube SEO 分析器 — Chrome 擴充功能
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.6-brightgreen)](https://github.com/lunkerchen/youtube-seo-analyzer)
+[![Version](https://img.shields.io/badge/version-1.10-brightgreen)](https://github.com/lunkerchen/youtube-seo-analyzer)
 [![Chrome](https://img.shields.io/badge/chrome-manifest--v3-4285F4)](https://developer.chrome.com/docs/extensions/)
 
 一鍵分析 YouTube 影片的 SEO 表現，直接在影片頁面上提供優化建議。  
@@ -27,6 +27,7 @@
 | **縮圖視覺分析** | Canvas 像素級：亮度、對比度、邊緣密度（文字代理）、色彩主調聚類 | P1–P3 |
 | **逐字稿分析** | YouTube 字幕 XML：前 30 秒關鍵詞覆蓋、wpm 密度、ASR 品質、口語 CTA | P1–P3 |
 | **Shorts 特化** | #Shorts 標籤強制、Hashtag 必備、說明長度門檻下調、標籤數寬限 | P0–P3 |
+| **選項頁自訂** | 22 項檢查獨立開關、7 項閾值可調（CJK 上限、標籤數、對比度等） | — |
 
 ### 綜合評分
 0–100 分，**P0（嚴重）→ P1（重要）→ P2（中等）→ P3（建議）**，每項附具體修復建議。
@@ -65,6 +66,7 @@ git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
    - **⚠️ 待優化項目**（P0→P3 依序排列）
 5. 按 **`Esc`** 或點擊面板外背景 → 關閉
 6. 按 **`↓`**（綠色圓鈕）→ 匯出 Markdown 報告
+7. 點擊工具列圖示 → 開啟**選項頁**，自訂檢查規則與閾值
 
 ### 快捷鍵
 | 按鍵 | 動作 |
@@ -85,9 +87,9 @@ git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
   └─ 使用者點擊 ⚙ 按鈕
        │
        ├─ extractVideoData()
-       │   ├─ ytInitialPlayerResponse (主路徑)
-       │   ├─ meta[itemprop="duration"] (ISO 8601 降級)
-       │   └─ DOM query fallback
+       │   ├─ ytInitialPlayerResponse (限 videoId 匹配當前 URL)
+       │   ├─ DOM query fallback (SPA 導航後自動降級)
+       │   └─ meta[itemprop="duration"] (ISO 8601 三層防禦)
        │
        ├─ analyzeThumbnail(data)        ← Canvas 像素分析
        │
@@ -105,7 +107,9 @@ git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
 
 ## 資料擷取
 
-### 主要來源：`ytInitialPlayerResponse`
+### 主要來源：`ytInitialPlayerResponse`（限 videoId 匹配）
+
+`ytInitialPlayerResponse` 在頁面首次載入時設定。SPA 導航後此變數**不會更新**，因此 `extractVideoData()` 會比對 `videoDetails.videoId` 與當前 URL，不匹配時自動降級 DOM 提取。
 
 | 路徑 | 對應資料 | 備註 |
 |------|----------|------|
@@ -187,6 +191,10 @@ git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
 | v1.4 | — | 安全性修復（XSS escape、Canvas try/catch、parseInt radix、injected flag clean） |
 | v1.5 | — | 匯出 Markdown 報告、Firefox scrollbar 相容、Color bucket Map 優化 |
 | v1.6 | 2026-05-14 | 影片長度擷取修復：新增 `meta[itemprop="duration"]` 三層降級機制 |
+| v1.7 | 2026-05-14 | 效能優化：像素迴圈合併 3→1 pass、createSEOInfo 拆 9 組件、預計算快取 |
+| v1.8 | 2026-05-14 | 選項頁：22 項檢查開關 + 7 項閾值自訂（settings.js + chrome.storage.sync） |
+| v1.9 | 2026-05-14 | 工具列圖示點擊 → 開啟選項頁（background service worker） |
+| v1.10 | 2026-05-14 | 修復 SPA 導航後分析停留在舊影片（videoId 比對 + DOM 自動降級） |
 
 ---
 
@@ -198,9 +206,15 @@ youtube-seo-analyzer/
 ├── LICENSE                 # MIT
 ├── .gitignore
 └── chrome-extension/
-    ├── manifest.json       # Manifest v3 設定（含 host_permissions）
-    ├── content.js          # 主邏輯：資料擷取 + 分析引擎 + UI 面板（~1200 行）
+    ├── manifest.json       # Manifest v3 設定（含 options_ui + action）
+    ├── content.js          # 主邏輯：資料擷取 + 分析引擎 + UI 面板
+    ├── settings.js         # 共用設定模組（chrome.storage.sync 讀取）
+    ├── background.js       # Service worker（工具列圖示點擊處理）
     ├── styles.css          # 注入樣式：深色主題面板 + FAB + 縮圖顯示
+    ├── options/
+    │   ├── options.html    # 選項頁 UI
+    │   ├── options.js      # 選項頁邏輯（載入/儲存設定）
+    │   └── options.css     # 選項頁樣式
     └── icons/
         ├── icon16.png
         ├── icon48.png
@@ -267,7 +281,6 @@ git clone https://github.com/lunkerchen/youtube-seo-analyzer.git
 
 - [ ] 多影片批次分析（頻道層級 SEO 健檢）
 - [ ] 對比多個影片的 SEO 分數
-- [ ] 擴充功能選項頁（自訂檢查規則）
 
 ---
 
