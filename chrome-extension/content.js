@@ -43,10 +43,11 @@
 
   function extractVideoData() {
     const videoId = getVideoIdFromUrl();
+    if (!videoId) return extractWatchFallback();
 
-    // Priority 1: ytInitialPlayerResponse (works for both watch & shorts)
+    // Priority 1: ytInitialPlayerResponse — but only if it matches current video
     const pr = window.ytInitialPlayerResponse;
-    if (pr?.videoDetails) {
+    if (pr?.videoDetails && pr.videoDetails.videoId === videoId) {
       const vd = pr.videoDetails;
       const _title = vd.title || '';
       const _desc = vd.shortDescription || '';
@@ -916,7 +917,7 @@
   }
 
   function renderFooter() {
-    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.9 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
+    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.10 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
   }
 
   function createSEOInfo(data, analysis, thumbResult, transcriptInfo) {
@@ -1205,6 +1206,15 @@
   }
 
   document.addEventListener('yt-navigate-finish', initExtension);
+
+  // Hide button immediately when navigation starts (avoids stale button)
+  document.addEventListener('yt-navigate-start', () => {
+    const btn = document.querySelector('.ytseo-fab');
+    if (btn) btn.classList.remove('ytseo-visible');
+    const panel = document.querySelector('.ytseo-overlay');
+    if (panel) { panel.classList.remove('ytseo-open'); setTimeout(() => panel.remove(), 300); }
+    panelOpen = false;
+  });
 
   if (document.readyState === 'complete') {
     initExtension();
