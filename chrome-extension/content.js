@@ -30,6 +30,15 @@
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  function extractDurationFromMeta() {
+    const meta = document.querySelector('meta[itemprop="duration"]');
+    if (!meta) return 0;
+    const content = meta.getAttribute('content') || '';
+    const m = content.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return 0;
+    return (parseInt(m[1]||'0',10) * 3600) + (parseInt(m[2]||'0',10) * 60) + parseInt(m[3]||'0',10);
+  }
+
   // ======================== DATA EXTRACTION ========================
 
   function extractVideoData() {
@@ -46,7 +55,7 @@
         channelName: vd.author || '',
         channelId: vd.channelId || '',
         viewCount: parseInt(vd.viewCount || '0', 10),
-        duration: parseInt(vd.lengthSeconds || '0', 10),
+        duration: parseInt(vd.lengthSeconds || extractDurationFromMeta() || '0', 10),
         videoId: vd.videoId || videoId,
         isLive: !!vd.isLiveContent,
         isPrivate: !!vd.isPrivate,
@@ -86,7 +95,7 @@
       channelName,
       channelId: '',
       viewCount: 0,
-      duration: 0,
+      duration: extractDurationFromMeta(),
       videoId,
       isLive: false,
       isPrivate: false,
@@ -120,7 +129,7 @@
       channelName,
       channelId: '',
       viewCount: parseInt(viewText) || 0,
-      duration: 0,
+      duration: extractDurationFromMeta(),
       videoId: new URLSearchParams(window.location.search).get('v') || '',
       isLive: false,
       isPrivate: false,
@@ -913,7 +922,7 @@
         </div>
 
         <div class="ytseo-footer">
-          YouTube SEO 分析器 v1.5 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕
+          YouTube SEO 分析器 v1.6 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕
         </div>
       </div>`;
   }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube SEO 分析器",
-  "version": "1.5",
+  "version": "1.6",
   "description": "一鍵分析 YouTube 影片 SEO + 縮圖視覺分析，支援 Shorts，提供優化建議",
   "permissions": ["storage"],
   "host_permissions": [
