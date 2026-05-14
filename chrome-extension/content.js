@@ -916,7 +916,7 @@
   }
 
   function renderFooter() {
-    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.8 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
+    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.9 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
   }
 
   function createSEOInfo(data, analysis, thumbResult, transcriptInfo) {
