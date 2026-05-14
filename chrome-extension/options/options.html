@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube SEO 分析器 — 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚙ YouTube SEO 分析器 — 設定</h1>
+      <p class="subtitle">自訂檢查規則與閾值，變更會自動儲存。</p>
+    </header>
+
+    <section>
+      <h2>📐 通用閾值</h2>
+      <div class="setting-grid">
+        <div class="setting">
+          <label>標題 CJK 上限</label>
+          <input type="number" id="thresh_cjk_max" min="10" max="60">
+          <span class="hint">超過此字數警告 P0（預設 30）</span>
+        </div>
+        <div class="setting">
+          <label>標籤數下限（一般）</label>
+          <input type="number" id="thresh_tags_min" min="3" max="50">
+          <span class="hint">少於此數量警告 P1（預設 15）</span>
+        </div>
+        <div class="setting">
+          <label>標籤數下限（Shorts）</label>
+          <input type="number" id="thresh_tags_min_shorts" min="2" max="30">
+          <span class="hint">少於此數量警告 P1（預設 8）</span>
+        </div>
+        <div class="setting">
+          <label>說明最少字數</label>
+          <input type="number" id="thresh_desc_min" min="0" max="1000">
+          <span class="hint">低於此字數警告 P2（預設 200）</span>
+        </div>
+        <div class="setting">
+          <label>縮圖對比度下限</label>
+          <input type="number" id="thresh_contrast_min" min="0" max="200">
+          <span class="hint">低於此值警告 P1（預設 40）</span>
+        </div>
+        <div class="setting">
+          <label>縮圖亮度下限</label>
+          <input type="number" id="thresh_brightness_min" min="0" max="255">
+          <span class="hint">低於此值警告 P2（預設 60）</span>
+        </div>
+        <div class="setting">
+          <label>口語密度下限 (wpm)</label>
+          <input type="number" id="thresh_wpm_min" min="10" max="300">
+          <span class="hint">低於此值警告 P2（預設 50）</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>🔘 檢查項目開關</h2>
+      <p class="section-desc">關閉的項目完全跳過，不計入分數。</p>
+      <div class="toggle-grid">
+        <div class="toggle-group">
+          <h3>📝 標題與說明</h3>
+          <label class="toggle"><input type="checkbox" id="check_title_length"><span>標題長度檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_tags_empty"><span>標籤為空檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_tags_count"><span>標籤數量檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_description_empty"><span>說明為空檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_description_150"><span>說明前 150 字檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_hashtag"><span>Hashtag 檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_cta"><span>CTA 檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_seo_block"><span>SEO 關鍵詞區塊檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_search_intent"><span>搜尋意圖檢查</span></label>
+        </div>
+        <div class="toggle-group">
+          <h3>🖼 縮圖</h3>
+          <label class="toggle"><input type="checkbox" id="check_thumbnail_resolution"><span>解析度檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_thumbnail_contrast"><span>對比度檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_thumbnail_brightness"><span>亮度檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_thumbnail_text"><span>文字機率檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_thumbnail_custom"><span>自訂縮圖檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_thumbnail_color"><span>色彩多樣性檢查</span></label>
+        </div>
+        <div class="toggle-group">
+          <h3>🎙 逐字稿</h3>
+          <label class="toggle"><input type="checkbox" id="check_transcript_30s"><span>前 30 秒關鍵詞檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_transcript_tags"><span>標籤關聯性檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_transcript_density"><span>關鍵詞密度檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_transcript_wpm"><span>口語密度檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_transcript_cta"><span>口語 CTA 檢查</span></label>
+          <label class="toggle"><input type="checkbox" id="check_transcript_asr"><span>ASR 字幕提示</span></label>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>🔧 工具</h2>
+      <button id="btn-reset" class="btn danger">重設為預設值</button>
+      <span id="save-status"></span>
+    </section>
+
+    <footer>
+      <p>YouTube SEO 分析器 v1.8 — 變更會自動儲存至 chrome.storage.sync</p>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

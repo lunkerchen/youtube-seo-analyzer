@@ -358,6 +358,7 @@
 
     const findings = [];
     const segments = transcript.segments;
+    const S = window.YTSEO_SETTINGS ? window.YTSEO_SETTINGS : { get: () => true };
     const fullText = transcript.fullText;
     const totalDuration = transcript.duration;
 
@@ -377,7 +378,7 @@
     const kwInFirst30 = significantWords.filter(w => first30Text.includes(w.toLowerCase()));
     const kwCoverage30 = significantWords.length > 0 ? kwInFirst30.length / significantWords.length : 0;
 
-    if (kwCoverage30 < 0.3 && significantWords.length >= 2 && first30Text.length > 20) {
+    if (S.get('check_transcript_30s') && kwCoverage30 < parseFloat(S.get('thresh_kw30_min')) && significantWords.length >= 2 && first30Text.length > 20) {
       findings.push({
         severity: 'P1', icon: '🎙',
         title: '前 30 秒未提及標題關鍵詞',
@@ -394,7 +395,7 @@
     });
     const tagRelevance = tags.length > 0 ? tagHits.length / tags.length : 0;
 
-    if (tags.length >= 3 && tagRelevance < 0.2) {
+    if (S.get('check_transcript_tags') && tags.length >= 3 && tagRelevance < parseFloat(S.get('thresh_tag_relevance_min'))) {
       findings.push({
         severity: 'P1', icon: '🎯',
         title: '逐字稿與標籤關聯性低',
@@ -411,7 +412,7 @@
       return sum + (matches ? matches.length : 0);
     }, 0);
 
-    if (wordCount > 50 && titleHitCount === 0 && significantWords.length >= 2) {
+    if (S.get('check_transcript_density') && wordCount > 50 && titleHitCount === 0 && significantWords.length >= 2) {
       findings.push({
         severity: 'P2', icon: '📊',
         title: '標題關鍵詞完全未出現在口語中',
@@ -423,7 +424,7 @@
     // — P2: Transcript-to-duration ratio (long silences) —
     if (totalDuration > 60 && wordCount > 0) {
       const wpm = wordCount / (totalDuration / 60);
-      if (wpm < 50) {
+      if (wpm < parseInt(S.get('thresh_wpm_min'), 10)) {
         findings.push({
           severity: 'P2', icon: '⏱',
           title: '口語密度偏低（可能有大量空白/音樂）',
@@ -438,7 +439,7 @@
     const last30Text = last30Segs.map(s => s.text).join(' ');
     const hasVerbalCTA = /訂閱|subscribe|追蹤|按讚|like|下一[集部]|next|記得.*(按讚|留言|分享)|comment|share/i.test(last30Text);
 
-    if (!hasVerbalCTA && totalDuration > 60) {
+    if (S.get('check_transcript_cta') && !hasVerbalCTA && totalDuration > 60) {
       findings.push({
         severity: 'P3', icon: '💬',
         title: '結尾缺乏口語行動呼籲 (CTA)',
@@ -448,7 +449,7 @@
     }
 
     // — P3: Verbal structure note —
-    if (transcript.isAuto) {
+    if (S.get('check_transcript_asr') && transcript.isAuto) {
       findings.push({
         severity: 'P3', icon: '🤖',
         title: '字幕為自動產生 (ASR)',
@@ -480,6 +481,7 @@
     let score = 100;
 
     // Use pre-computed values from data when available, else compute
+    const S = window.YTSEO_SETTINGS ? window.YTSEO_SETTINGS : { get: () => true };
     const cjkChars = data._cjkChars || (data.title.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []);
     const descLength = data._descLength != null ? data._descLength : (data.description ? data.description.trim().length : 0);
     const hasNoTags = !data.tags || data.tags.length === 0;
@@ -488,7 +490,7 @@
     //  P0 — Critical
     // =============================================
 
-    if (hasNoTags) {
+    if (S.get('check_tags_empty') && hasNoTags) {
       issues.push({
         severity: 'P0', icon: '🏷',
         title: '完全沒有標籤 (Tags)',
@@ -499,7 +501,7 @@
     }
 
     // Shorts: #Shorts in title
-    if (isShorts) {
+    if (isShorts && S.get('check_title_length')) {
       const hasShortsTag = /#\s*[Ss]horts/.test(data.title);
       if (!hasShortsTag) {
         issues.push({
@@ -512,17 +514,17 @@
       }
     }
 
-    if (cjkChars.length > 30) {
+    if (S.get('check_title_length') && cjkChars.length > parseInt(S.get('thresh_cjk_max'), 10)) {
       issues.push({
         severity: 'P0', icon: '📱',
-        title: `標題中文字元過長（${cjkChars.length} 字）`,
+        title: `標題中文字元過長（${cjkChars.length} 字）`, 
         detail: `YouTube 在行動裝置上約顯示 30 個中文字。超出 ${cjkChars.length - 30} 字會被截斷。`,
         fix: `前 30 字：${data.title.slice(0, 30)}…。請將核心關鍵詞和鉤子全部移入前 30 字範圍內。`,
       });
       score -= 15;
     }
 
-    if (descLength === 0) {
+    if (S.get('check_description_empty') && descLength === 0) {
       issues.push({
         severity: 'P0', icon: '📝',
         title: isShorts ? 'Shorts 說明為空' : '完全沒有影片說明',
@@ -540,7 +542,7 @@
     //  P1 — Important
     // =============================================
 
-    if (!hasNoTags && data.tags.length < 10) {
+    if (S.get('check_tags_count') && !hasNoTags && data.tags.length < parseInt(S.get(isShorts ? 'thresh_tags_min_shorts' : 'thresh_tags_min'), 10)) {
       issues.push({
         severity: 'P1', icon: '🏷',
         title: `標籤僅 ${data.tags.length} 個（建議 ${isShorts ? '8–12' : '15–20'}）`,
@@ -556,7 +558,7 @@
     if (descLength > 0 && !isShorts) {
       const first150 = data.description.trim().substring(0, 150);
       const isBoilerplate = /^\s*(影片|這部|歡迎|嗨|哈囉|hello|hi|大家好|哈摟)/i.test(first150);
-      if (isBoilerplate && first150.length < 80) {
+      if (S.get('check_description_150') && isBoilerplate && first150.length < parseInt(S.get('thresh_boilerplate_max'), 10)) {
         issues.push({
           severity: 'P1', icon: '📝',
           title: '說明前 150 字被通用開場白佔用',
@@ -568,7 +570,7 @@
 
       const titleWords = data.title.split(/[\s,，、.。、:：!！?？]+/).filter(w => w.length > 1 && w.length < 20);
       const keywordInFirst150 = titleWords.some(w => first150.includes(w));
-      if (!keywordInFirst150 && titleWords.length > 0 && first150.length > 20) {
+      if (S.get('check_description_150') && !keywordInFirst150 && titleWords.length > 0 && first150.length > 20) {
         issues.push({
           severity: 'P1', icon: '🔍',
           title: '標題關鍵詞未出現在說明前 150 字',
@@ -584,8 +586,7 @@
     // =============================================
 
     if (thumbResult) {
-      // P1: Not max resolution
-      if (!thumbResult.isMaxRes) {
+      if (S.get('check_thumbnail_resolution') && !thumbResult.isMaxRes) {
         issues.push({
           severity: 'P1', icon: '🖼',
           title: '縮圖非最高解析度（低於 1280px）',
@@ -595,8 +596,7 @@
         score -= 10;
       }
 
-      // P1: Low contrast
-      if (thumbResult.contrast < 40 && thumbResult.contrast > 0) {
+      if (S.get('check_thumbnail_contrast') && thumbResult.contrast < parseInt(S.get('thresh_contrast_min'), 10) && thumbResult.contrast > 0) {
         issues.push({
           severity: 'P1', icon: '🎨',
           title: '縮圖對比度偏低',
@@ -606,8 +606,7 @@
         score -= 10;
       }
 
-      // P2: Low brightness (too dark)
-      if (thumbResult.avgBrightness < 60 && thumbResult.avgBrightness > 0) {
+      if (S.get('check_thumbnail_brightness') && thumbResult.avgBrightness < parseInt(S.get('thresh_brightness_min'), 10) && thumbResult.avgBrightness > 0) {
         issues.push({
           severity: 'P2', icon: '🌑',
           title: '縮圖整體偏暗',
@@ -617,8 +616,7 @@
         score -= 5;
       }
 
-      // P2: Likely has text in thumbnail
-      if (thumbResult.textLikelihood === 'high') {
+      if (S.get('check_thumbnail_text') && thumbResult.textLikelihood === 'high') {
         // Check for title-thumbnail redundancy
         const titleWords = data.title.split(/[\s,，、.。、:：!！?？/#]+/).filter(w => w.length > 1);
         // We can't OCR, but we can flag the general concern
@@ -629,7 +627,7 @@
           fix: '檢查縮圖文字是否與標題重複。若是，移除縮圖文字或改用標題未涵蓋的情緒鉤子。分工原則：標題 = 搜尋關鍵詞，縮圖 = 情緒 + 視覺證明。',
         });
         score -= 5;
-      } else if (thumbResult.textLikelihood === 'medium') {
+      } else if (S.get('check_thumbnail_text') && thumbResult.textLikelihood === 'medium') {
         issues.push({
           severity: 'P3', icon: '🔤',
           title: '縮圖可能含有文字（邊緣密度中等）',
@@ -639,8 +637,7 @@
         score -= 2;
       }
 
-      // P2: Not a custom thumbnail (auto-generated)
-      if (thumbResult.isCustom === false) {
+      if (S.get('check_thumbnail_custom') && thumbResult.isCustom === false) {
         issues.push({
           severity: 'P2', icon: '🤖',
           title: '縮圖為自動生成（非自訂）',
@@ -650,8 +647,7 @@
         score -= 8;
       }
 
-      // P3: Color diversity tip
-      if (thumbResult.dominantColors?.length <= 1 && thumbResult.dominantColors?.length > 0) {
+      if (S.get('check_thumbnail_color') && thumbResult.dominantColors?.length <= 1 && thumbResult.dominantColors?.length > 0) {
         issues.push({
           severity: 'P3', icon: '🎨',
           title: '縮圖色彩單一',
@@ -666,7 +662,7 @@
     //  P2 — Moderate (only for non-Shorts)
     // =============================================
 
-    if (!isShorts && data.title.length > 0 && data.title.length < 15) {
+    if (S.get('check_title_length') && !isShorts && data.title.length > 0 && data.title.length < parseInt(S.get('thresh_cjk_max'), 10) / 2) {
       issues.push({
         severity: 'P2', icon: '📏',
         title: '標題過短',
@@ -678,7 +674,7 @@
 
     if (descLength > 0) {
       const hashtagCount = (data.description.match(/#[\w\u4e00-\u9fff]+/g) || []).length;
-      if (hashtagCount === 0) {
+      if (S.get('check_hashtag') && hashtagCount === 0) {
         issues.push({
           severity: isShorts ? 'P2' : 'P2', icon: '#️⃣',
           title: isShorts ? '說明中未使用 Hashtag（Shorts 必備）' : '說明中未使用 Hashtag',
@@ -693,7 +689,7 @@
       }
     }
 
-    if (!isShorts && descLength > 0 && descLength < 200) {
+    if (S.get('check_description_150') && !isShorts && descLength > 0 && descLength < parseInt(S.get('thresh_desc_min'), 10)) {
       issues.push({
         severity: 'P2', icon: '📝',
         title: `說明文字偏短（${descLength} 字）`,
@@ -707,7 +703,7 @@
     //  P3 — Suggestions
     // =============================================
 
-    if (descLength > 0) {
+    if (S.get('check_cta') && descLength > 0) {
       const hasCTA = /訂閱|subscribe|追蹤|按讚|like|留言|comment|分享|share/i.test(data.description);
       if (!hasCTA) {
         issues.push({
@@ -722,7 +718,7 @@
       }
     }
 
-    if (!isShorts && descLength > 100) {
+    if (S.get('check_seo_block') && !isShorts && descLength > 100) {
       const hasSEOBlock = /關鍵[字詞]|seo|keywords|tags|search|搜尋/i.test(data.description);
       if (!hasSEOBlock) {
         issues.push({
@@ -735,7 +731,7 @@
       }
     }
 
-    if (!isShorts) {
+    if (S.get('check_search_intent') && !isShorts) {
       const titleHasDelimiter = /[|｜—–\-–—]/g.test(data.title);
       if (titleHasDelimiter && cjkChars.length > 20) {
         issues.push({
@@ -749,7 +745,7 @@
     }
 
     // Shorts-specific: description length expectation
-    if (isShorts && descLength > 0 && descLength < 50) {
+    if (S.get('check_description_150') && isShorts && descLength > 0 && descLength < 50) {
       issues.push({
         severity: 'P3', icon: '📝',
         title: 'Shorts 說明有改善空間',
@@ -920,7 +916,7 @@
   }
 
   function renderFooter() {
-    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.7 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
+    return '<div class="ytseo-footer">YouTube SEO 分析器 v1.8 &mdash; 縮圖分析為 Canvas 像素估算，逐字稿取自頁面字幕</div>';
   }
 
   function createSEOInfo(data, analysis, thumbResult, transcriptInfo) {
@@ -1190,11 +1186,21 @@
   function initExtension() {
     cleanupExtension();
     if (!isWatchPage() && !isShortsPage()) return;
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => injectButton());
+    // Ensure settings are loaded before showing button
+    if (window.YTSEO_SETTINGS && window.YTSEO_SETTINGS.loadSync) {
+      window.YTSEO_SETTINGS.loadSync().then(() => {
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => injectButton());
+        } else {
+          setTimeout(injectButton, 1500);
+        }
+      });
     } else {
-      setTimeout(injectButton, 1500);
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => injectButton());
+      } else {
+        setTimeout(injectButton, 1500);
+      }
     }
   }
 
