@@ -1,0 +1,5 @@
+node_modules/
+.DS_Store
+gen_icon.py
+*.log
+.env
